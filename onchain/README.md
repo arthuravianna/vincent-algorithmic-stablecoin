@@ -30,14 +30,17 @@ npx hardhat test solidity
 npx hardhat test nodejs
 ```
 
-### Make a deployment to Sepolia
+### Deployment
 
-This project includes an example Ignition module to deploy the contract. You can deploy this module to a locally simulated chain or to Sepolia.
-
-To run the deployment to a local chain:
+Deploy to a local hardhat network
 
 ```shell
-npx hardhat ignition deploy ignition/modules/VincentAlgorithmicStablecoin.ts
+npx hardhat run scripts/deploy.ts
+```
+
+Deploy to Sepolia
+```shell
+npx hardhat run scripts/deploy.ts --network sepolia
 ```
 
 To run the deployment to Sepolia, you need an account with funds to send the transaction. The provided Hardhat configuration includes a Configuration Variable called `SEPOLIA_PRIVATE_KEY`, which you can use to set the private key of the account you want to use.
