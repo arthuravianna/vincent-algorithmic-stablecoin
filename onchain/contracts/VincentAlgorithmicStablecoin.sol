@@ -18,9 +18,15 @@ contract VincentAlgorithmicStablecoin is ERC20, ERC20Burnable, Ownable {
     error VincentAlgorithmicStablecoin_NotZeroAddress();
     error VincentAlgorithmicStablecoin_MustBeMoreThanZero();
 
-    constructor() ERC20("VincentAlgorithmicStablecoin", "VAS") Ownable(msg.sender) {}
+    constructor()
+        ERC20("VincentAlgorithmicStablecoin", "VAS")
+        Ownable(msg.sender)
+    {}
 
-    function mint(address to, uint256 amount) external onlyOwner returns (bool) {
+    function mint(
+        address to,
+        uint256 amount
+    ) external onlyOwner returns (bool) {
         if (to == address(0)) {
             revert VincentAlgorithmicStablecoin_NotZeroAddress();
         }
