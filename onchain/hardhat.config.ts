@@ -20,6 +20,9 @@ const config: HardhatUserConfig = {
         },
       },
     },
+    npmFilesToBuild: [
+      "@pythnetwork/pyth-sdk-solidity/PythUtils.sol"
+    ],
   },
   networks: {
     hardhatMainnet: {

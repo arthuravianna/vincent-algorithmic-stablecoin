@@ -107,7 +107,12 @@ contract VincentAlgorithmicStablecoinEngine is ReentrancyGuard {
     function depositCollateral(
         address token,
         uint256 amount
-    ) public nonReentrant isAcceptedCollateralToken(token) {
+    )
+        public
+        nonReentrant
+        isAcceptedCollateralToken(token)
+        nonZeroAmount(amount)
+    {
         // Transfer the collateral tokens from the user to the contract
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
@@ -164,7 +169,14 @@ contract VincentAlgorithmicStablecoinEngine is ReentrancyGuard {
         uint256 amountVasToMint,
         bytes[] calldata pythPriceUpdates,
         uint64[] memory pythPublishTimes
-    ) external payable nonReentrant isAcceptedCollateralToken(token) {
+    )
+        external
+        payable
+        nonReentrant
+        isAcceptedCollateralToken(token)
+        nonZeroAmount(amountCollateral)
+        nonZeroAmount(amountVasToMint)
+    {
         depositCollateral(token, amountCollateral);
         mintVas(amountVasToMint, pythPriceUpdates, pythPublishTimes);
     }
@@ -172,6 +184,58 @@ contract VincentAlgorithmicStablecoinEngine is ReentrancyGuard {
     //
     // PRIVATE FUNCTIONS
     //
+
+    // function copied from PythUtils.sol
+    function _convertToUint(
+        int64 price,
+        int32 expo,
+        uint8 targetDecimals
+    ) public pure returns (uint256) {
+        if (price < 0) {
+            revert PythErrors.NegativeInputPrice();
+        }
+        if (expo < -255) {
+            revert PythErrors.InvalidInputExpo();
+        }
+
+        // If targetDecimals is 6, we want to multiply the final price by 10 ** -6
+        // So the delta exponent is targetDecimals + currentExpo
+        int32 deltaExponent = int32(uint32(targetDecimals)) + expo;
+
+        // Bounds check: prevent overflow/underflow with base 10 exponentiation
+        // Calculation: 10 ** n <= (2 ** 256 - 63) - 1
+        //              n <= log10((2 ** 193) - 1)
+        //              n <= 58.2
+        if (deltaExponent > 58 || deltaExponent < -58)
+            revert PythErrors.ExponentOverflow();
+
+        // We can safely cast the price to uint256 because the above condition will revert if the price is negative
+        uint256 unsignedPrice = uint256(uint64(price));
+
+        if (deltaExponent > 0) {
+            (bool success, uint256 result) = Math.tryMul(
+                unsignedPrice,
+                10 ** uint32(deltaExponent)
+            );
+            // This condition is unreachable since we validated deltaExponent bounds above.
+            // But keeping it here for safety.
+            if (!success) {
+                revert PythErrors.CombinedPriceOverflow();
+            }
+            return result;
+        } else {
+            (bool success, uint256 result) = Math.tryDiv(
+                unsignedPrice,
+                10 ** uint(Math.abs(deltaExponent))
+            );
+            // This condition is unreachable since we validated deltaExponent bounds above.
+            // But keeping it here for safety.
+            if (!success) {
+                revert PythErrors.CombinedPriceOverflow();
+            }
+            return result;
+        }
+    }
 
     /**
      *
@@ -213,7 +277,12 @@ contract VincentAlgorithmicStablecoinEngine is ReentrancyGuard {
         );
 
         // Convert Pyth price to uint256 with PRECISION_EXPONENT decimal precision using PythUtils
-        uint256 price = PythUtils.convertToUint(
+        // uint256 price = PythUtils.convertToUint(
+        //     currentBasePrice.price,
+        //     currentBasePrice.expo,
+        //     PRECISION_EXPONENT
+        // );
+        uint256 price = _convertToUint(
             currentBasePrice.price,
             currentBasePrice.expo,
             PRECISION_EXPONENT

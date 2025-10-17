@@ -9,6 +9,15 @@ const vincentAlgorithmicStablecoinModule = buildModule(
   }
 );
 
+const PythUtilsModule = buildModule(
+  "PythUtilsModule",
+  (m) => {
+    const pythUtils = m.contract("PythUtils");
+
+    return { pythUtils };
+  }
+);
+
 export default buildModule("VincentAlgorithmicStablecoinEngineModule", (m) => {
   // Get the Pyth address directly as a parameter
   // This will be computed and passed from the deploy script
@@ -23,12 +32,15 @@ export default buildModule("VincentAlgorithmicStablecoinEngineModule", (m) => {
   const priceFeedIds = m.getParameter("priceFeedIds", []);
 
   const { vas } = m.useModule(vincentAlgorithmicStablecoinModule);
+  //const { pythUtils } = m.useModule(PythUtilsModule);
   const vasEngine = m.contract("VincentAlgorithmicStablecoinEngine", [
     vas,
     pythPriceFeedAddress,
     tokenAddresses,
     priceFeedIds,
-  ]);
+  ], 
+    //{libraries: {PythUtils: pythUtils  }}
+  );
   m.call(vas, "transferOwnership", [vasEngine]);
   return { vas, vasEngine };
 });
