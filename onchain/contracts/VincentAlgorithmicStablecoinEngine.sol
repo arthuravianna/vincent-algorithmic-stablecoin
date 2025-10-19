@@ -3,10 +3,12 @@ pragma solidity ^0.8.18;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import "@pythnetwork/pyth-sdk-solidity/PythUtils.sol";
+import "@pythnetwork/pyth-sdk-solidity/PythErrors.sol";
 
 import {VincentAlgorithmicStablecoin} from "./VincentAlgorithmicStablecoin.sol";
 
@@ -44,6 +46,13 @@ contract VincentAlgorithmicStablecoinEngine is ReentrancyGuard {
     mapping(address user => mapping(address token => uint256 amount))
         private s_collateralBalances;
     mapping(address user => uint256 amountVasMinted) private s_VasMinted;
+
+    // STRUCTS
+    struct TokenBalance {
+        address token;
+        uint256 amount;
+        uint8 decimals;
+    }
 
     //
     // EVENTS
@@ -113,13 +122,7 @@ contract VincentAlgorithmicStablecoinEngine is ReentrancyGuard {
         isAcceptedCollateralToken(token)
         nonZeroAmount(amount)
     {
-        // Transfer the collateral tokens from the user to the contract
-        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
-
-        // Update the user's collateral balance
-        s_collateralBalances[msg.sender][token] += amount;
-
-        emit CollateralDeposited(msg.sender, token, amount);
+        _depositCollateral(token, amount);
     }
 
     /**
@@ -134,18 +137,7 @@ contract VincentAlgorithmicStablecoinEngine is ReentrancyGuard {
         bytes[] calldata pythPriceUpdates,
         uint64[] memory pythPublishTimes
     ) public payable nonReentrant nonZeroAmount(amountVasToMint) {
-        s_VasMinted[msg.sender] += amountVasToMint;
-
-        // update prices Pyth price feeds if needed (Pull Oracle)
-        _updatePythPricesIfNeeded(pythPriceUpdates, pythPublishTimes);
-
-        // should revert if user becomes undercollateralized
-        _revertIfHealthFactorIsBroken(msg.sender);
-
-        bool minted = i_vas.mint(msg.sender, amountVasToMint);
-        if (!minted) {
-            revert VincentAlgorithmicStablecoinEngine_MintFailed();
-        }
+        _mintVas(amountVasToMint, pythPriceUpdates, pythPublishTimes);
     }
 
     //
@@ -177,13 +169,72 @@ contract VincentAlgorithmicStablecoinEngine is ReentrancyGuard {
         nonZeroAmount(amountCollateral)
         nonZeroAmount(amountVasToMint)
     {
-        depositCollateral(token, amountCollateral);
-        mintVas(amountVasToMint, pythPriceUpdates, pythPublishTimes);
+        _depositCollateral(token, amountCollateral);
+        _mintVas(amountVasToMint, pythPriceUpdates, pythPublishTimes);
+    }
+
+    function getAccountInformationBalances(
+        address user
+    )
+        external
+        view
+        returns (uint256 totalVasMinted, TokenBalance[] memory balances)
+    {
+        totalVasMinted = s_VasMinted[user];
+        balances = new TokenBalance[](s_acceptedCollateralTokens.length);
+        for (uint256 i = 0; i < s_acceptedCollateralTokens.length; i++) {
+            address token = s_acceptedCollateralTokens[i];
+            uint8 decimals = IERC20Metadata(token).decimals();
+            uint256 amount = s_collateralBalances[user][token];
+            balances[i] = TokenBalance(token, amount, decimals);
+        }
+        // return both totalVasMinted and collateral balances
+        return (totalVasMinted, balances);
     }
 
     //
     // PRIVATE FUNCTIONS
     //
+
+    /**
+     * @notice Internal function to deposit collateral without reentrancy protection
+     * @param token address of the deposited token
+     * @param amount amount of the deposited token
+     */
+    function _depositCollateral(address token, uint256 amount) internal {
+        // Transfer the collateral tokens from the user to the contract
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
+
+        // Update the user's collateral balance
+        s_collateralBalances[msg.sender][token] += amount;
+
+        emit CollateralDeposited(msg.sender, token, amount);
+    }
+
+    /**
+     * @notice Internal function to mint VAS without reentrancy protection
+     * @param amountVasToMint amount of VAS to mint
+     * @param pythPriceUpdates Pyth price updates
+     * @param pythPublishTimes Pyth publish times
+     */
+    function _mintVas(
+        uint256 amountVasToMint,
+        bytes[] calldata pythPriceUpdates,
+        uint64[] memory pythPublishTimes
+    ) internal {
+        s_VasMinted[msg.sender] += amountVasToMint;
+
+        // update prices Pyth price feeds if needed (Pull Oracle)
+        _updatePythPricesIfNeeded(pythPriceUpdates, pythPublishTimes);
+
+        // should revert if user becomes undercollateralized
+        _revertIfHealthFactorIsBroken(msg.sender);
+
+        bool minted = i_vas.mint(msg.sender, amountVasToMint);
+        if (!minted) {
+            revert VincentAlgorithmicStablecoinEngine_MintFailed();
+        }
+    }
 
     // function copied from PythUtils.sol
     function _convertToUint(
@@ -248,11 +299,30 @@ contract VincentAlgorithmicStablecoinEngine is ReentrancyGuard {
         uint64[] memory pythPublishTimes
     ) private {
         uint fee = i_pyth.getUpdateFee(pythPriceUpdates);
-        i_pyth.updatePriceFeedsIfNecessary{value: fee}(
-            pythPriceUpdates,
-            s_priceFeedIds,
-            pythPublishTimes
-        );
+
+        try
+            i_pyth.updatePriceFeedsIfNecessary{value: fee}(
+                pythPriceUpdates,
+                s_priceFeedIds,
+                pythPublishTimes
+            )
+        {
+            // Price feeds were successfully updated
+        } catch (bytes memory reason) {
+            // Check if the error is NoFreshUpdate
+            if (reason.length == 4) {
+                bytes4 errorSelector = bytes4(reason);
+                if (errorSelector == PythErrors.NoFreshUpdate.selector) {
+                    // This is expected when prices are already up-to-date
+                    // Simply return without reverting
+                    return;
+                }
+            }
+            // Re-throw any other errors
+            assembly {
+                revert(add(reason, 0x20), mload(reason))
+            }
+        }
     }
 
     /**
@@ -299,7 +369,7 @@ contract VincentAlgorithmicStablecoinEngine is ReentrancyGuard {
      * @return collateralValueInUsd
      * @notice Returns the total VAS minted and the total collateral value in USD for a given user.
      */
-    function _getAccountInformation(
+    function _getAccountInformationUsd(
         address user
     )
         private
@@ -330,7 +400,7 @@ contract VincentAlgorithmicStablecoinEngine is ReentrancyGuard {
         (
             uint256 totalVasMinted,
             uint256 collateralValueInUsd
-        ) = _getAccountInformation(user);
+        ) = _getAccountInformationUsd(user);
         if (totalVasMinted == 0) {
             return type(uint256).max;
         }
