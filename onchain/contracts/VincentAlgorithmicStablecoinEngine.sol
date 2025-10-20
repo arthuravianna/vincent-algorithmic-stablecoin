@@ -27,12 +27,16 @@ contract VincentAlgorithmicStablecoinEngine is ReentrancyGuard {
     );
     error VincentAlgorithmicStablecoinEngine_MintFailed();
     error VincentAlgorithmicStablecoinEngine_AmountMustBeGreaterThanZero();
+    error VincentAlgorithmicStablecoinEngine_HealthFactorOk();
+    error VincentAlgorithmicStablecoinEngine_HealthFactorNotImproved();
+    error VincentAlgorithmicStablecoinEngine_TransferFailed();
 
     VincentAlgorithmicStablecoin private immutable i_vas;
     uint8 private constant PRECISION_EXPONENT = 18;
     uint256 private constant PRECISION = 10 ** PRECISION_EXPONENT;
     uint256 private constant LIQUIDATION_THRESHOLD = 50; // 200% overcollateralized
     uint256 private constant LIQUIDATION_PRECISION = 100;
+    uint256 private constant LIQUIDATION_BONUS = 10; // 10%
     uint256 private constant MIN_HEALTH_FACTOR = PRECISION; // 1x health factor
 
     // The IPyth interface from pyth-sdk-solidity provides the methods to interact with the Pyth contract.
@@ -59,6 +63,13 @@ contract VincentAlgorithmicStablecoinEngine is ReentrancyGuard {
     //
     event CollateralDeposited(
         address indexed user,
+        address indexed token,
+        uint256 amount
+    );
+
+    event CollateralRedeemed(
+        address indexed from,
+        address indexed to,
         address indexed token,
         uint256 amount
     );
@@ -192,6 +203,58 @@ contract VincentAlgorithmicStablecoinEngine is ReentrancyGuard {
         return (totalVasMinted, balances);
     }
 
+    /**
+     * @notice Liquidates a user's collateral to cover their debt
+     * @notice You can partially liquidate a user
+     * @notice You will get a liquidation bonus for taking the users funds
+     * @param collateral The address of the collateral token to liquidate
+     * @param user The address of the user to liquidate. Their _healthFactor must be below the minimum
+     * @param debtToCover The amount of debt to cover
+     */
+    function liquidate(
+        address collateral,
+        address user,
+        uint256 debtToCover,
+        bytes[] calldata pythPriceUpdates,
+        uint64[] memory pythPublishTimes
+    ) external nonZeroAmount(debtToCover) nonReentrant {
+        // update prices Pyth price feeds if needed (Pull Oracle)
+        _updatePythPricesIfNeeded(pythPriceUpdates, pythPublishTimes);
+
+        uint256 startingUserHealthFactor = _healthFactor(user);
+        if (startingUserHealthFactor >= MIN_HEALTH_FACTOR) {
+            revert VincentAlgorithmicStablecoinEngine_HealthFactorOk();
+        }
+
+        // we want to burn user's VAS "debt"
+        // and take their collateral
+        // Bad User: $140 ETH, $100 VAS
+        // debtToCover = $100
+        // $100 of VAS == ??? ETH?
+        uint256 tokenAmountFromDebtCovered = _getTokenFromUsd(
+            collateral,
+            debtToCover
+        );
+        uint256 bonusCollateral = (tokenAmountFromDebtCovered *
+            LIQUIDATION_BONUS) / LIQUIDATION_PRECISION;
+        uint256 totalCollateralToRedeem = tokenAmountFromDebtCovered +
+            bonusCollateral;
+        _redeemCollateral(
+            collateral,
+            totalCollateralToRedeem,
+            user,
+            msg.sender
+        );
+        _burnVas(debtToCover, user, msg.sender);
+
+        uint256 endingUserHealthFactor = _healthFactor(user);
+        if (endingUserHealthFactor <= startingUserHealthFactor) {
+            revert VincentAlgorithmicStablecoinEngine_HealthFactorNotImproved();
+        }
+
+        _revertIfHealthFactorIsBroken(msg.sender);
+    }
+
     //
     // PRIVATE FUNCTIONS
     //
@@ -234,6 +297,29 @@ contract VincentAlgorithmicStablecoinEngine is ReentrancyGuard {
         if (!minted) {
             revert VincentAlgorithmicStablecoinEngine_MintFailed();
         }
+    }
+
+    /**
+     * @notice Internal function to burn VAS without reentrancy protection
+     * @param amountVasToBurn amount of VAS to burn
+     * @param onBehalfOf address of the user on behalf of whom the VAS is burned
+     * @param vasFrom address from which the VAS tokens will be taken
+     */
+    function _burnVas(
+        uint256 amountVasToBurn,
+        address onBehalfOf,
+        address vasFrom
+    ) private {
+        s_VasMinted[onBehalfOf] -= amountVasToBurn;
+        bool success = i_vas.transferFrom(
+            vasFrom,
+            address(this),
+            amountVasToBurn
+        );
+        if (!success) {
+            revert VincentAlgorithmicStablecoinEngine_TransferFailed();
+        }
+        i_vas.burn(amountVasToBurn);
     }
 
     // function copied from PythUtils.sol
@@ -360,6 +446,51 @@ contract VincentAlgorithmicStablecoinEngine is ReentrancyGuard {
 
         // Calculate USD value: (amount * price) / PRECISION
         return (amount * price) / PRECISION;
+    }
+
+    function _getTokenFromUsd(
+        address token,
+        uint256 usdAmountInWei
+    ) private view returns (uint256) {
+        // 1. Get the price of the token
+        // 2. Convert the amount of USD to token amount
+        // 3. Return the token amount
+        bytes32 priceFeedId = s_tokenToPriceFeedId[token];
+        PythStructs.Price memory currentBasePrice = i_pyth.getPriceNoOlderThan(
+            priceFeedId,
+            i_priceFeedAgeInSeconds
+        );
+
+        uint256 price = _convertToUint(
+            currentBasePrice.price,
+            currentBasePrice.expo,
+            PRECISION_EXPONENT
+        );
+
+        return (usdAmountInWei * PRECISION) / price;
+    }
+
+    function _redeemCollateral(
+        address tokenCollateralAddress,
+        uint256 amountCollateral,
+        address from,
+        address to
+    ) private {
+        s_collateralBalances[from][tokenCollateralAddress] -= amountCollateral;
+        emit CollateralRedeemed(
+            from,
+            to,
+            tokenCollateralAddress,
+            amountCollateral
+        );
+
+        bool success = IERC20(tokenCollateralAddress).transfer(
+            to,
+            amountCollateral
+        );
+        if (!success) {
+            revert VincentAlgorithmicStablecoinEngine_TransferFailed();
+        }
     }
 
     /**

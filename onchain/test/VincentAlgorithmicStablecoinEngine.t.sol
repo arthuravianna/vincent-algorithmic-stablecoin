@@ -23,6 +23,7 @@ contract VincentAlgorithmicStablecoinEngineTest is Test {
     uint public constant PythSingleUpdateFeeInWei = 0; // 0 fee
 
     address public USER = makeAddr("USER");
+    address public LIQUIDATOR = makeAddr("LIQUIDATOR");
     int64 public constant WETH_PRICE = 300000000000; // $3000 with 8 decimals
     int64 public constant WBTC_PRICE = 10000000000000; // $100000 with 8 decimals
     uint64 public constant PRICE_FEED_CONFIDENCE = 988558348; // example confidence interval
@@ -30,8 +31,8 @@ contract VincentAlgorithmicStablecoinEngineTest is Test {
     uint public constant PRICE_FEED_PUBLISH_TIME = 1;
     uint256 public constant STARTING_ERC20_BALANCE = 10 ether;
     uint256 public constant AMOUNT_COLLATERAL = 10 ether;
-    uint256 public constant AMOUNT_VAS_BACKED_BY_WETH_COLLATERAL = 15000; // $3000 * 10 ETH / 2 = 15000 VAS
-    uint256 public constant AMOUNT_VAS_BACKED_BY_WBTC_COLLATERAL = 50000; // $100000 * 10 WBTC / 2 = 50000 VAS
+    uint256 public constant AMOUNT_VAS_BACKED_BY_WETH_COLLATERAL = 15000 ether; // $3000 * 10 ETH / 2 = 15000 VAS
+    uint256 public constant AMOUNT_VAS_BACKED_BY_WBTC_COLLATERAL = 500000 ether; // $100000 * 10 WBTC / 2 = 500000 VAS
 
     VincentAlgorithmicStablecoin public vas;
     MockPyth public mockPyth;
@@ -113,11 +114,11 @@ contract VincentAlgorithmicStablecoinEngineTest is Test {
     modifier depositedCollateralAndMinted(address tokenAddress) {
         vm.startPrank(USER);
         MockERC20(tokenAddress).approve(address(engine), AMOUNT_COLLATERAL);
-        uint256 amountDscToMint = 0;
+        uint256 amountVasToMint = 0;
         if (tokenAddress == address(wethMock)) {
-            amountDscToMint = AMOUNT_VAS_BACKED_BY_WETH_COLLATERAL;
+            amountVasToMint = AMOUNT_VAS_BACKED_BY_WETH_COLLATERAL;
         } else if (tokenAddress == address(wbtcMock)) {
-            amountDscToMint = AMOUNT_VAS_BACKED_BY_WBTC_COLLATERAL;
+            amountVasToMint = AMOUNT_VAS_BACKED_BY_WBTC_COLLATERAL;
         }
 
         bytes[] memory pythPriceUpdates = new bytes[](0);
@@ -127,7 +128,7 @@ contract VincentAlgorithmicStablecoinEngineTest is Test {
         engine.depositCollateralAndMint(
             tokenAddress,
             AMOUNT_COLLATERAL,
-            amountDscToMint,
+            amountVasToMint,
             pythPriceUpdates,
             pythPublishTimes
         );
@@ -238,5 +239,104 @@ contract VincentAlgorithmicStablecoinEngineTest is Test {
             AMOUNT_COLLATERAL,
             "WBTC collateral balance should match deposited amount"
         );
+    }
+
+    function testRevertsIfMintBreaksHealthFactor()
+        public
+        depositedCollateral(address(wethMock))
+    {
+        vm.startPrank(USER);
+        uint256 amountVasToMint = AMOUNT_VAS_BACKED_BY_WETH_COLLATERAL + 1; // Exceeding the allowed mint amount
+
+        bytes[] memory pythPriceUpdates = new bytes[](0);
+        uint64[] memory pythPublishTimes = new uint64[](2);
+        pythPublishTimes[0] = 0;
+        pythPublishTimes[1] = 0;
+
+        uint256 expectedUserHealthFactor = 999999999999999999;
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                VincentAlgorithmicStablecoinEngine
+                    .VincentAlgorithmicStablecoinEngine_HealthFactorIsBroken
+                    .selector,
+                expectedUserHealthFactor
+            )
+        );
+        engine.mintVas(amountVasToMint, pythPriceUpdates, pythPublishTimes);
+        vm.stopPrank();
+    }
+
+    function testLiquidate()
+        public
+        depositedCollateralAndMinted(address(wbtcMock))
+    {
+        // make the WBTC price drop to break USER's health factor
+        // from 200% to 100%
+        // so that he can be liquidated
+        bytes[] memory updateData = new bytes[](1);
+
+        // Set up WBTC Pyth price feed
+        updateData[0] = abi.encode(
+            PythStructs.PriceFeed(
+                wbtcUsdPythPriceFeedId,
+                PythStructs.Price(
+                    (WBTC_PRICE * 3) / 4, // 25% price drop
+                    PRICE_FEED_CONFIDENCE,
+                    PRICE_FEED_DECIMALS,
+                    PRICE_FEED_PUBLISH_TIME + 1
+                ),
+                PythStructs.Price(
+                    (WBTC_PRICE * 3) / 4, // 25% price drop
+                    PRICE_FEED_CONFIDENCE,
+                    PRICE_FEED_DECIMALS,
+                    PRICE_FEED_PUBLISH_TIME + 1
+                )
+            )
+        );
+        mockPyth.updatePriceFeeds{value: 0}(updateData);
+
+        (uint256 startingUserTotalVasMinted, ) = engine
+            .getAccountInformationBalances(USER);
+        uint256 debtToCover = AMOUNT_VAS_BACKED_BY_WBTC_COLLATERAL / 4; // debt to cover is 25% of previous value
+
+        // seting up LIQUIDATOR
+        // 1) give them WBTC
+        // 2) approve the VAS Engine
+        // 3) deposit collateral and mint VAS to be able to liquidate
+        uint256 liquidatorAmountCollateral = 4 * AMOUNT_COLLATERAL;
+        uint256 liquidatorAmountVasBackedByCollateral = 2 *
+            AMOUNT_VAS_BACKED_BY_WBTC_COLLATERAL;
+        wbtcMock.mint(LIQUIDATOR, liquidatorAmountCollateral);
+
+        vm.startPrank(LIQUIDATOR);
+        wbtcMock.approve(address(engine), liquidatorAmountCollateral);
+        bytes[] memory pythPriceUpdates = new bytes[](0);
+        uint64[] memory pythPublishTimes = new uint64[](2);
+        pythPublishTimes[0] = 0;
+        pythPublishTimes[1] = 0;
+        engine.depositCollateralAndMint(
+            address(wbtcMock),
+            liquidatorAmountCollateral,
+            liquidatorAmountVasBackedByCollateral,
+            pythPriceUpdates,
+            pythPublishTimes
+        );
+
+        // liquidator allows VAS Engine to burn their VAS
+        // to cover for USER debt
+        vas.approve(address(engine), debtToCover);
+        engine.liquidate(
+            address(wbtcMock),
+            USER,
+            debtToCover,
+            pythPriceUpdates,
+            pythPublishTimes
+        );
+        (uint256 endingUserTotalVasMinted, ) = engine
+            .getAccountInformationBalances(USER);
+
+        // assert
+        assert(startingUserTotalVasMinted > endingUserTotalVasMinted);
+        vm.stopPrank();
     }
 }
