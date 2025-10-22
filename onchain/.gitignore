@@ -18,3 +18,6 @@
 
 # Hardhat coverage reports
 /coverage
+
+# Hardhat devnet deployments
+/ignition/deployments/chain-31337

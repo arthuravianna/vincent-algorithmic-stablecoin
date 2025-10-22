@@ -56,6 +56,7 @@ contract VincentAlgorithmicStablecoinEngine is ReentrancyGuard {
         address token;
         uint256 amount;
         uint8 decimals;
+        bytes32 priceFeedId;
     }
 
     //
@@ -197,7 +198,12 @@ contract VincentAlgorithmicStablecoinEngine is ReentrancyGuard {
             address token = s_acceptedCollateralTokens[i];
             uint8 decimals = IERC20Metadata(token).decimals();
             uint256 amount = s_collateralBalances[user][token];
-            balances[i] = TokenBalance(token, amount, decimals);
+            balances[i] = TokenBalance(
+                token,
+                amount,
+                decimals,
+                s_tokenToPriceFeedId[token]
+            );
         }
         // return both totalVasMinted and collateral balances
         return (totalVasMinted, balances);
@@ -253,6 +259,18 @@ contract VincentAlgorithmicStablecoinEngine is ReentrancyGuard {
         }
 
         _revertIfHealthFactorIsBroken(msg.sender);
+    }
+
+    function getPriceFeedIds() external view returns (bytes32[] memory) {
+        return s_priceFeedIds;
+    }
+
+    function getAcceptedCollateralTokens()
+        external
+        view
+        returns (address[] memory)
+    {
+        return s_acceptedCollateralTokens;
     }
 
     //

@@ -120,7 +120,8 @@ const getTokenAddressesAndPriceFeeds = (chainId: number) => {
 
 async function main() {
   const connection = await hre.network.connect();
-  const chainId = connection.id;
+  const chainId = connection.networkConfig.chainId!;
+
   const pythPriceFeedAddress = getPythAddress(chainId);
   const { tokenAddresses, priceFeedIds } =
     getTokenAddressesAndPriceFeeds(chainId);
