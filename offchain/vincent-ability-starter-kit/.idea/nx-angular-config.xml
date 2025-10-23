@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="NxAngularConfigService" workspaceLocation="file://$PROJECT_DIR$/nx.json">
+    <projects>
+      <project name="ability-native-send" file="file://$PROJECT_DIR$/packages/ability-native-send/project.json" />
+      <project name="example-e2e" file="file://$PROJECT_DIR$/packages/test-e2e/project.json" />
+      <project name="policy-counter" file="file://$PROJECT_DIR$/packages/policy-counter/project.json" />
+    </projects>
+  </component>
+</project>

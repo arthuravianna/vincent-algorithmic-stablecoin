@@ -1,0 +1,14 @@
+packages:
+  - packages/*
+overrides:
+  typescript: 5.8.3
+  zod: 3.25.76
+onlyBuiltDependencies:
+  - '@swc/core'
+  - bufferutil
+  - es5-ext
+  - esbuild
+  - nx
+  - protobufjs
+  - unrs-resolver
+  - utf-8-validate

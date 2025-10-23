@@ -1,0 +1,90 @@
+{
+  "name": "@lit-protocol/vincent-starter-kit-source",
+  "version": "0.0.0",
+  "description": "Lit Protocol Vincent starter kit SDK",
+  "license": "MIT",
+  "private": false,
+  "main": "index.js",
+  "engines": {
+    "node": "^20.19.4",
+    "pnpm": "10.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LIT-Protocol/vincent-starter-kit.git"
+  },
+  "homepage": "https://github.com/LIT-Protocol/vincent-starter-kit#readme",
+  "bugs": {
+    "url": "https://github.com/LIT-Protocol/vincent-starter-kit/issues"
+  },
+  "keywords": [
+    "library",
+    "vincent"
+  ],
+  "packageManager": "pnpm@10.7.0",
+  "scripts": {
+    "preinstall": "./scripts/check-packagemanager.sh",
+    "build": "nx run-many --outputStyle=static -t build",
+    "test": "nx run-many -t test",
+    "test-e2e": "nx run-many -t test-e2e",
+    "reset-e2e": "mv packages/test-e2e/.env.test-e2e packages/test-e2e/.env.test-e2e.backup",
+    "lint": "nx run-many --outputStyle=static -t lint",
+    "typecheck": "nx run-many --outputStyle=static -t typecheck",
+    "clean": "nx reset && nx run-many --outputStyle=static -t=clean && rm -Rf node_modules tsconfig.tsbuildinfo",
+    "prepare": "husky",
+    "use-corepack": "corepack enable && corepack enable npm && corepack enable pnpm",
+    "reset": "pnpm clean && pnpm install",
+    "hard-build": "pnpm reset && pnpm build",
+    "bootstrap": "pnpm install && pnpm build && tsx ./src/bin/bootstrap.ts"
+  },
+  "dependencies": {
+    "envfile": "7.1.0",
+    "inquirer": "12.9.4",
+    "tslib": "2.8.1",
+    "tsx": "4.20.5"
+  },
+  "devDependencies": {
+    "@babel/preset-env": "7.28.3",
+    "@dotenvx/dotenvx": "1.44.2",
+    "@eslint/js": "9.25.1",
+    "@lit-protocol/vincent-example-e2e": "workspace:*",
+    "@nx/eslint": "21.2.1",
+    "@nx/eslint-plugin": "21.2.1",
+    "@nx/jest": "21.2.1",
+    "@nx/js": "21.2.1",
+    "@nx/node": "21.2.1",
+    "@swc-node/register": "1.9.1",
+    "@swc/core": "1.5.7",
+    "@swc/helpers": "0.5.11",
+    "@types/inquirer": "9.0.9",
+    "@types/jest": "29.5.14",
+    "@types/node": "20",
+    "@typescript-eslint/eslint-plugin": "8.26.1",
+    "@typescript-eslint/parser": "8.26.1",
+    "babel-jest": "30.1.1",
+    "cli-table3": "0.6.5",
+    "esbuild": "0.19.2",
+    "eslint": "9.22.0",
+    "eslint-config-next": "15.1.7",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-import-resolver-typescript": "4.4.4",
+    "eslint-plugin-import-x": "4.16.1",
+    "eslint-plugin-perfectionist": "4.15.0",
+    "eslint-plugin-prettier": "5.2.3",
+    "ethers": "5.8.0",
+    "husky": "9.1.7",
+    "jest": "29.7.0",
+    "jest-environment-node": "29.7.0",
+    "jsonc-eslint-parser": "2.4.0",
+    "lint-staged": "15.5.1",
+    "nx": "21.2.1",
+    "prettier": "3.5.3",
+    "ts-jest": "29.2.6",
+    "ts-node": "10.9.1",
+    "typescript": "5.8.3",
+    "typescript-eslint": "8.29.0"
+  },
+  "overrides": {
+    "typescript": "5.8.3"
+  }
+}
