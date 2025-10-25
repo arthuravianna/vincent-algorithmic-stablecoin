@@ -1,6 +1,6 @@
 {
   "name": "@arthuravianna/vas-liquidate-ability",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A Vincent ability that liquidates undercollateralized Vincent Algorithmic Stablecoin users.",
   "main": "./dist/src/index.js",
   "module": "./dist/src/index.js",
@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@lit-protocol/vincent-ability-sdk": "^2.0.0",
-    "@lit-protocol/vincent-example-policy-counter": "workspace:*",
     "@lit-protocol/vincent-scaffold-sdk": "^2.0.0",
     "@pythnetwork/hermes-client": "^2.0.0",
     "ethers": "5.8.0",
