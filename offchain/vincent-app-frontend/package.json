@@ -13,6 +13,7 @@
     "@libsql/client": "^0.15.15",
     "@lit-protocol/auth-helpers": "^8.1.0",
     "@lit-protocol/lit-node-client": "^7.3.1",
+    "@lit-protocol/vincent-ability-erc20-approval": "^3.1.4",
     "@lit-protocol/vincent-app-sdk": "^2.2.3",
     "@t3-oss/env-core": "^0.13.8",
     "@vercel/functions": "^3.1.4",

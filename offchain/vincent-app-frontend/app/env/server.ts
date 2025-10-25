@@ -4,7 +4,10 @@ import { z } from "zod";
 export const serverEnv = createEnv({
   server: {
     RPC_URL: z.url(),
+    CHRONICLE_YELLOWSTONE_RPC: z.url(),
+    VINCENT_DELEGATEE_PRIVATE_KEY: z.string().min(1, 'VINCENT_DELEGATEE_PRIVATE_KEY is required'),
     VAS_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'Invalid Ethereum address'),
+    VAS_ENGINE_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'Invalid Ethereum address'),
     VINCENT_APP_ID: z.number(),
     CRON_SECRET: z.string(),
     TURSO_AUTH_TOKEN: z.string(),
