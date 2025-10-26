@@ -97,6 +97,18 @@ const getTokenAddressesAndPriceFeeds = (chainId: number) => {
     "0xc9d8b075a5c69303365ae23633d4e085199bf5c520a3b90fed1322a0342ffc33", // BTC/USD
     "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace", // ETH/USD
   ];
+
+  // ignore tokens with zero address on certain chains
+  let selectedTokenAddresses: Array<string> = [];
+  let selectedPriceFeedIds: Array<string> = [];
+  for (let i = 0; i < tokenAddresses[chainId].length; i++) {
+    const tokenAddress = tokenAddresses[chainId][i];
+    if (tokenAddress !== "0x0000000000000000000000000000000000000000") {
+      selectedTokenAddresses.push(tokenAddress);
+      selectedPriceFeedIds.push(priceFeedIdsArray[i]);
+    }
+  }
+
   const priceFeedIds: Record<number, Array<string>> = {
     // All chains use the same Pyth price feed IDs
     1: priceFeedIdsArray,
@@ -113,8 +125,8 @@ const getTokenAddressesAndPriceFeeds = (chainId: number) => {
   };
 
   return {
-    tokenAddresses: tokenAddresses[chainId] || [],
-    priceFeedIds: priceFeedIds[chainId] || [],
+    tokenAddresses: selectedTokenAddresses,
+    priceFeedIds: selectedPriceFeedIds,
   };
 };
 

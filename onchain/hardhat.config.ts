@@ -56,8 +56,16 @@ const config: HardhatUserConfig = {
     sepolia: {
       type: "http",
       chainType: "l1",
+      chainId: 11155111,
       url: configVariable("SEPOLIA_RPC_URL"),
       accounts: [configVariable("SEPOLIA_PRIVATE_KEY")],
+    },
+    baseSepolia: {
+      type: "http",
+      chainType: "l1",
+      chainId: 84532,
+      url: configVariable("BASE_SEPOLIA_RPC_URL"),
+      accounts: [configVariable("BASE_SEPOLIA_PRIVATE_KEY")],
     },
   },
 };

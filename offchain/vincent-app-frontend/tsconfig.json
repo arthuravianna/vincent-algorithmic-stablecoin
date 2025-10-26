@@ -21,6 +21,8 @@
     "paths": {
       "@/*": ["./*"],
       "@env/*": ["./app/env/*"],
+      "@hooks/*": ["./app/hooks/*"],
+      "@components/*": ["./app/components/*"],
     }
   },
   "include": [

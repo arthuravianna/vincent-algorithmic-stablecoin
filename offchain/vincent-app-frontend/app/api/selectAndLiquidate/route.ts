@@ -1,4 +1,5 @@
 import { serverEnv } from "@env/server";
+import { clientEnv } from "@env/client";
 import { NextRequest } from "next/dist/server/web/spec-extension/request";
 import { ethers } from "ethers";
 import client from '../../turso_sql/turso';
@@ -42,8 +43,8 @@ export async function GET(request: NextRequest) {
     console.log('Starting liquidator selection and liquidation process...');
 
     // Setup blockchain connection
-    const provider = new ethers.providers.JsonRpcProvider(serverEnv.RPC_URL);
-    const vasContract = new ethers.Contract(serverEnv.VAS_ADDRESS, VAS_ABI, provider);
+    const provider = new ethers.providers.JsonRpcProvider(clientEnv.NEXT_PUBLIC_RPC_URL);
+    const vasContract = new ethers.Contract(clientEnv.NEXT_PUBLIC_VAS_TOKEN_ADDRESS, VAS_ABI, provider);
 
     // Step 1: Select liquidators and find one with VAS balance > 0
     const selectedLiquidator = await selectLiquidatorWithBalance(vasContract);
@@ -176,10 +177,10 @@ async function selectUndercollateralizedUser(liquidator: Liquidator): Promise<Un
     };
 
     let liquidateAbilityParams = {
-        rpcUrl: serverEnv.RPC_URL,
+        rpcUrl: clientEnv.NEXT_PUBLIC_RPC_URL,
         userAddress: '', // to be filled per user
-        engineAddress: serverEnv.VAS_ENGINE_ADDRESS,
-        vasAddress: serverEnv.VAS_ADDRESS,
+        engineAddress: clientEnv.NEXT_PUBLIC_VAS_ENGINE_ADDRESS,
+        vasAddress: clientEnv.NEXT_PUBLIC_VAS_TOKEN_ADDRESS,
     };
     for (const row of usersResult.rows) {
         liquidateAbilityParams.userAddress = row.address as string;
@@ -210,9 +211,9 @@ async function selectUndercollateralizedUser(liquidator: Liquidator): Promise<Un
 
 async function approveLiquidatorVas(debtToLiquidate: bigint, liquidator: Liquidator): Promise<`0x${string}` | null> {
   let approvalParams = {
-    rpcUrl: serverEnv.RPC_URL,
-    tokenAddress: serverEnv.VAS_ADDRESS,
-    spenderAddress: serverEnv.VAS_ENGINE_ADDRESS,
+    rpcUrl: clientEnv.NEXT_PUBLIC_RPC_URL,
+    tokenAddress: clientEnv.NEXT_PUBLIC_VAS_TOKEN_ADDRESS,
+    spenderAddress: clientEnv.NEXT_PUBLIC_VAS_ENGINE_ADDRESS,
     amount: debtToLiquidate,
   };
 
@@ -246,9 +247,9 @@ async function approveLiquidatorVas(debtToLiquidate: bigint, liquidator: Liquida
 
 async function liquidate(undercollateralizedUser: UndercollateralizedUser, liquidator: Liquidator) {
   let liquidateAbilityParams = {
-    rpcUrl: serverEnv.RPC_URL,
-    engineAddress: serverEnv.VAS_ENGINE_ADDRESS,
-    vasAddress: serverEnv.VAS_ADDRESS,
+    rpcUrl: clientEnv.NEXT_PUBLIC_RPC_URL,
+    engineAddress: clientEnv.NEXT_PUBLIC_VAS_ENGINE_ADDRESS,
+    vasAddress: clientEnv.NEXT_PUBLIC_VAS_TOKEN_ADDRESS,
     userAddress: undercollateralizedUser.userAddress,
     debtToLiquidate: undercollateralizedUser.debtToLiquidate,
     collateralAddress: undercollateralizedUser.collateralAddress,

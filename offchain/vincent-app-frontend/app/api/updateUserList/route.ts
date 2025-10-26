@@ -1,4 +1,5 @@
 import { serverEnv } from '@env/server';
+import { clientEnv } from '@env/client';
 import { NextRequest } from 'next/server';
 import client from '../../turso_sql/turso';
 
@@ -21,6 +22,7 @@ export async function GET(request: NextRequest) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const provider = new ethers.providers.JsonRpcProvider(clientEnv.NEXT_PUBLIC_RPC_URL);
     // Step 1: Get the last created_at date from the users table
     const lastBlockNumberResult = await client.execute(
       'SELECT block_number FROM users ORDER BY block_number DESC LIMIT 1'
@@ -32,14 +34,12 @@ export async function GET(request: NextRequest) {
 
     } else {
       // If no users exist, start from a recent block (e.g., last 1000 blocks)
-      const provider = new ethers.providers.JsonRpcProvider(serverEnv.RPC_URL);
       const currentBlock = await provider.getBlockNumber();
       fromBlock = Math.max(0, currentBlock - 1000);
     }
 
     // Step 2: Get VAS mint events (Transfer events from address(0))
-    const provider = new ethers.providers.JsonRpcProvider(serverEnv.RPC_URL);
-    const vasContract = new ethers.Contract(serverEnv.VAS_ADDRESS, VAS_ABI, provider);
+    const vasContract = new ethers.Contract(clientEnv.NEXT_PUBLIC_VAS_TOKEN_ADDRESS, VAS_ABI, provider);
 
     console.log(`Fetching mint events from block ${fromBlock} to latest...`);
     
